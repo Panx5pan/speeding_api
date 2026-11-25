@@ -1,0 +1,4 @@
+connexion[uvicorn,swagger-ui]
+confluent-kafka
+pyyaml
+httpx

@@ -1,0 +1,123 @@
+openapi: 3.0.3
+info:
+  description: This API receives speed readings from GPS/phones and camera stations around the world
+  version: "1.0.0"
+  title: Speeding Receiver API
+  contact:
+    email: mtanwu@my.bcit.ca
+paths:
+  /status:
+    get:
+      summary: Health check
+      operationId: receiver_to_db.get_status
+      responses:
+        '200':
+          description: Service is running
+
+  /vehicle/speed:
+    post:
+      summary: Reports a single speed reading
+      operationId: receiver_to_db.report_speed
+      description: Adds a speed reading
+      requestBody:
+        required: True
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpeedReading'
+      responses:
+        '201':
+          description: speed reading successfully received
+        '400':
+          description: 'invalid input, object invalid'
+        '503':
+          description: message broker unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+  /vehicle/violation:
+    post:
+      summary: Reports a single violation reading
+      operationId: receiver_to_db.report_violation
+      description: Adds a violation reading
+      requestBody:
+        required: True
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ViolationReading'
+      responses:
+        '201':
+          description: violation reading successfully received
+        '400':
+          description: 'invalid input, object invalid'
+        '503':
+          description: message broker unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+components:
+  schemas:
+    SpeedReading:
+      required:
+        - device_id
+        - vehicle_plate
+        - speed_mph
+        - location
+        - timestamp
+      properties:
+        device_id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-5e6f-4a8b-9c0d-1e2f3a4b5c6d"
+        vehicle_plate:
+          type: string
+          example: "ABCDEF"
+        speed_mph:
+          type: number
+          example: 62.4
+        location:
+          type: string
+          example: "Highway 1, Vancouver"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-09-13T14:32:07.123Z"
+      type: object
+
+    ViolationReading:
+      required:
+        - station_id
+        - vehicle_plate
+        - speed_overlimit_mph
+        - location
+        - timestamp
+      properties:
+        station_id:
+          type: string
+          format: uuid
+          example: "7f3e9a12-44b1-4c9e-8d2a-6b1f0e5c3a9d"
+        vehicle_plate:
+          type: string
+          example: "ABCDEF"
+        speed_overlimit_mph:
+          type: number
+          example: 18.5
+        location:
+          type: string
+          example: "Camera Station #14, Knight St Bridge, Richmond, BC"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-09-13T14:35:52.891Z"
+      type: object
+
+    ErrorMessage:
+      type: object
+      properties:
+        message:
+          type: string

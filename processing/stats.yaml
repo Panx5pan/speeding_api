@@ -1,0 +1,69 @@
+openapi: 3.0.3
+info:
+  title: Speeding Stats API
+  description: Provides statistics about speed readings and violations
+  version: "1.0.0"
+  contact:
+    email: mtanwu@my.bcit.ca
+
+paths:
+  /status:
+    get:
+      summary: Health check
+      operationId: app.get_status
+      responses:
+        '200':
+          description: Service is running
+
+  /stats:
+    get:
+      summary: Get event statistics
+      operationId: app.get_stats
+      description: Returns the latest statistics calculated from stored events
+      responses:
+        '200':
+          description: Current statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessingStats'
+
+components:
+  schemas:
+    ProcessingStats:
+      type: object
+      required:
+        - num_speed_readings
+        - max_speed_mph
+        - avg_speed_mph
+        - num_violations
+        - max_speed_overlimit_mph
+        - last_updated
+      properties:
+        num_speed_readings:
+          type: integer
+          example: 1200
+        max_speed_mph:
+          type: number
+          example: 98.3
+        avg_speed_mph:
+          type: number
+          example: 61.7
+        num_violations:
+          type: integer
+          example: 350
+        max_speed_overlimit_mph:
+          type: number
+          example: 42.1
+        last_speed_recorded:
+          type: string
+          format: date-time
+          example: "2026-10-24T23:18:11.017966Z"
+        last_violation_recorded:
+          type: string
+          format: date-time
+          example: "2026-10-24T23:18:11.017966Z"
+        last_updated:
+          type: string
+          format: date-time
+          example: "2026-10-24T23:18:15.000000Z"

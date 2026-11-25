@@ -1,0 +1,31 @@
+{
+  "violation_count": 0,
+  "speed_count": 4,
+  "speed_events": [
+    {
+      "device_id": "a1b2c3d4-5e6f-4a8b-9c0d-1e2f3a4b5c6d",
+      "speed_mph": 62.4,
+      "location": "Highway 1, Vancouver",
+      "timestamp": "2026-09-13T14:32:07.123Z"
+    },
+    {
+      "device_id": "a1b2c3d4-5e6f-4a8b-9c0d-1e2f3a4b5c6d",
+      "speed_mph": 62.4,
+      "location": "Highway 1, Vancouver",
+      "timestamp": "2026-09-13T14:32:07.123Z"
+    },
+    {
+      "device_id": "a1b2c3d4-5e6f-4a8b-9c0d-1e2f3a4b5c6d",
+      "speed_mph": 62.4,
+      "location": "Highway 1, Vancouver",
+      "timestamp": "2026-09-13T14:32:07.123Z"
+    },
+    {
+      "device_id": "a1b2c3d4-5e6f-4a8b-9c0d-1e2f3a4b5c6d",
+      "speed_mph": 62.4,
+      "location": "Highway 1, Vancouver",
+      "timestamp": "2026-09-13T14:32:07.123Z"
+    }
+  ],
+  "violation_events": []
+}

@@ -1,0 +1,224 @@
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_RANDOM_ROOT_PASSWORD: "1"
+      MYSQL_USER: myuser
+      MYSQL_PASSWORD: mypassword
+      MYSQL_DATABASE: data
+      TZ: America/Vancouver
+    volumes:
+      - db-data:/var/lib/mysql
+    restart: unless-stopped           
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "myuser", "-pmypassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  storage:
+    build:
+      context: storage
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=mysql+pymysql://myuser:mypassword@db:3306/data
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped           
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:12345/status"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+
+  receiver:
+    build:
+      context: receiver
+      dockerfile: Dockerfile
+    environment:
+      - KAFKA_BROKER=redpanda:9092
+      - KAFKA_TOPIC=events
+    depends_on:
+      redpanda:
+        condition: service_healthy    
+    restart: unless-stopped           
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:12345/status"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+    ports:
+      - "8080:12345"
+
+  processing:
+    build:
+      context: processing
+      dockerfile: Dockerfile
+    environment:
+      - STORAGE_URL=http://storage:12345
+      - STATS_FILE=/data/stats.json
+      - PROCESSING_INTERVAL=5
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - processing-data:/data
+    depends_on:
+      storage:
+        condition: service_healthy
+    restart: unless-stopped           
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:12345/status"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+    ports:
+      - "8100:12345"
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v26.1.10
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
+      - --mode dev-container
+      - --smp 1
+      - --default-log-level=info
+      - --set redpanda.auto_create_topics_enabled=true  
+    volumes:
+      - redpanda:/var/lib/redpanda/data
+    restart: unless-stopped            
+    healthcheck:                       
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:v3.7.4
+    entrypoint: /bin/sh
+    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml; /app/console'
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:9092"]
+        schemaRegistry:
+          enabled: true
+          urls: ["http://redpanda:8081"]
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://redpanda:9644"]
+    ports:
+      - "8085:8080"
+    depends_on:
+      redpanda:
+        condition: service_healthy    
+    restart: unless-stopped           
+
+  storage-worker:
+    build:
+      context: storage
+      dockerfile: Dockerfile
+    command: ["python", "worker.py"]
+    environment:
+      - DATABASE_URL=mysql+pymysql://myuser:mypassword@db:3306/data
+      - KAFKA_BROKER=redpanda:9092
+      - KAFKA_TOPIC=events
+    depends_on:
+      db:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy    
+    restart: unless-stopped         
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - redpanda
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:latest
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:latest
+    ports:
+      - "12345:12345"
+    volumes:
+      - ./prometheus/config.alloy:/etc/alloy/config.alloy
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.1.3
+    ports:
+      - 3000:3000
+    environment:
+      - GF_INSTALL_PLUGINS=yesoreyeram-infinity-datasource
+      - GF_SECURITY_ADMIN_PASSWORD=password
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    restart: unless-stopped
+
+  anomaly-worker:
+    build:
+      context: anomaly
+      dockerfile: Dockerfile
+    command: ["python", "worker.py"]
+    environment:
+      - KAFKA_BROKER=redpanda:9092
+      - KAFKA_TOPIC=events
+      - DLQ_TOPIC=anomalies
+      - SPEED_ABOVE_MPH=100
+      - VIOLATION_ABOVE_MPH=40
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    restart: unless-stopped
+
+  anomaly:
+    build:
+      context: anomaly
+      dockerfile: Dockerfile
+    environment:
+      - KAFKA_BROKER=redpanda:9092
+      - KAFKA_TOPIC=events
+      - DLQ_TOPIC=anomalies
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:12345/status"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+    ports:
+      - "8200:12345"
+      
+volumes:
+  db-data:
+  processing-data:
+  redpanda:
+  grafana-storage:

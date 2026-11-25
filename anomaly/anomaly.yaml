@@ -1,0 +1,117 @@
+openapi: 3.0.3
+info:
+  title: Speeding Anomaly API
+  description: Reports anomalous speed and violation events, using Kafka as its only data store
+  version: "1.0.0"
+  contact:
+    email: mtanwu@my.bcit.ca
+
+paths:
+  /status:
+    get:
+      summary: Health check
+      operationId: app.get_status
+      responses:
+        '200':
+          description: Service is running
+
+  /anomalies:
+    get:
+      summary: Anomalies detected by the worker and published to the dead letter queue
+      operationId: app.get_anomalies
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+          description: Maximum number of anomalies to return (newest first); count is always the total
+      responses:
+        '200':
+          description: Count and list of anomalies
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnomalyList'
+        '503':
+          description: Message broker unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+  /scan:
+    get:
+      summary: Live-scan the events topic using thresholds from the URL
+      operationId: app.scan
+      parameters:
+        - in: query
+          name: type
+          required: true
+          schema:
+            type: string
+            enum: [speed, violation]
+          description: Event type to scan
+        - in: query
+          name: above
+          required: false
+          schema:
+            type: number
+          description: Match events whose value is above this number
+        - in: query
+          name: below
+          required: false
+          schema:
+            type: number
+          description: Match events whose value is below this number
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+          description: Maximum number of matches to return (newest first); count is always the total
+      responses:
+        '200':
+          description: Count and list of matching events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnomalyList'
+        '400':
+          description: Neither above nor below was provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '503':
+          description: Message broker unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+components:
+  schemas:
+    AnomalyList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 2
+        anomalies:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    ErrorMessage:
+      type: object
+      properties:
+        message:
+          type: string

@@ -1,0 +1,157 @@
+openapi: 3.0.3
+info:
+  description: This API serves speed and violation readings stored in the database. Events are written by the storage worker (Kafka consumer); this service is read-only.
+  version: "1.0.0"
+  title: Speeding Storage API
+  contact:
+    email: mtanwu@my.bcit.ca
+
+paths:
+  /status:
+    get:
+      summary: Health check
+      operationId: app.get_status
+      description: Returns 200 if the storage service is up
+      responses:
+        '200':
+          description: Service is running
+
+  /vehicle/speed:
+    get:
+      summary: Gets speed readings recorded after a timestamp
+      operationId: app.get_speed_readings
+      description: Returns all speed readings recorded by storage after the given timestamp (all readings if omitted)
+      parameters:
+        - in: query
+          name: after
+          required: false
+          schema:
+            type: string
+            format: date-time
+            example: "2026-10-24T22:31:44.123456Z"
+          description: Return only readings recorded after this UTC timestamp
+      responses:
+        '200':
+          description: A list of speed readings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SpeedReading'
+        '503':
+          description: Database unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+  /vehicle/violation:
+    get:
+      summary: Gets violation readings recorded after a timestamp
+      operationId: app.get_violation_readings
+      description: Returns all violation readings recorded by storage after the given timestamp (all readings if omitted)
+      parameters:
+        - in: query
+          name: after
+          required: false
+          schema:
+            type: string
+            format: date-time
+            example: "2026-10-24T22:31:44.123456Z"
+          description: Return only readings recorded after this UTC timestamp
+      responses:
+        '200':
+          description: A list of violation readings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ViolationReading'
+        '503':
+          description: Database unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+components:
+  schemas:
+    SpeedReading:
+      type: object
+      required:
+        - device_id
+        - vehicle_plate
+        - speed_mph
+        - location
+        - timestamp
+      properties:
+        device_id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-5e6f-4a8b-9c0d-1e2f3a4b5c6d"
+        vehicle_plate:
+          type: string
+          example: "ABCDEF"
+        speed_mph:
+          type: number
+          example: 62.4
+        location:
+          type: string
+          example: "Highway 1, Vancouver"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-09-13T14:32:07.123Z"
+        trace_id:
+          type: integer
+          format: int64
+        recorded_timestamp:
+          type: string
+          format: date-time
+          readOnly: true
+          description: When storage saved the event (UTC), set by the server
+          example: "2026-10-24T22:31:44.123456Z"
+
+    ViolationReading:
+      type: object
+      required:
+        - station_id
+        - vehicle_plate
+        - speed_overlimit_mph
+        - location
+        - timestamp
+      properties:
+        station_id:
+          type: string
+          format: uuid
+          example: "7f3e9a12-44b1-4c9e-8d2a-6b1f0e5c3a9d"
+        vehicle_plate:
+          type: string
+          example: "ABCDEF"
+        speed_overlimit_mph:
+          type: number
+          example: 18.5
+        location:
+          type: string
+          example: "Camera Station #14, Knight St Bridge, Richmond, BC"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-09-13T14:35:52.891Z"
+        trace_id:
+          type: integer
+          format: int64
+        recorded_timestamp:
+          type: string
+          format: date-time
+          readOnly: true
+          description: When storage saved the event (UTC), set by the server
+          example: "2026-10-24T22:31:44.123456Z"
+
+    ErrorMessage:
+      type: object
+      properties:
+        message:
+          type: string
