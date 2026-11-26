@@ -1,0 +1,113 @@
+import base64
+import json
+import urllib.error
+import urllib.request
+
+BASE = "http://127.0.0.1:3000/grafana"
+DASHBOARD = "dashboard/dashboard-1795122750740.json"
+
+env = {}
+for line in open(".env"):
+    line = line.strip()
+    if line and not line.startswith("#") and "=" in line:
+        key, value = line.split("=", 1)
+        env[key] = value.strip().strip('"').strip("'")
+
+auth = "Basic " + base64.b64encode(f"admin:{env['GRAFANA_PASSWORD']}".encode()).decode()
+
+
+def call(method, path, body=None):
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(
+        BASE + path,
+        method=method,
+        data=data,
+        headers={"Authorization": auth, "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            raw = resp.read()
+            return resp.status, (json.loads(raw) if raw else None)
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode()
+
+
+wanted = {}
+
+
+def add(uid, typ):
+    if uid and typ and not uid.startswith("-") and not uid.startswith("$"):
+        wanted[uid] = typ
+
+
+def walk(obj):
+    if isinstance(obj, dict):
+        ds = obj.get("datasource")
+        if isinstance(ds, dict):
+            if ds.get("uid") and ds.get("type"):
+                add(ds["uid"], ds["type"])
+            elif ds.get("name") and obj.get("group"):
+                add(ds["name"], obj["group"])
+        for value in obj.values():
+            walk(value)
+    elif isinstance(obj, list):
+        for value in obj:
+            walk(value)
+
+
+walk(json.load(open(DASHBOARD)))
+print("Data sources the dashboard uses:")
+for uid, typ in wanted.items():
+    print(f"  {typ}  uid={uid}")
+if not wanted:
+    print("  (none found - send me the output of:")
+    print(f"   grep -nE '\"(datasource|group)\"' {DASHBOARD} | head -20 )")
+    raise SystemExit(1)
+
+status, existing = call("GET", "/api/datasources")
+if status != 200:
+    print("Cannot list data sources:", status, existing)
+    raise SystemExit(1)
+
+wanted_types = set(wanted.values())
+for ds in existing:
+    if ds["type"] in wanted_types and ds["uid"] not in wanted:
+        call("DELETE", f"/api/datasources/uid/{ds['uid']}")
+        print(f"Removed hand-made data source: {ds['name']}")
+
+have = {ds["uid"] for ds in existing}
+counts = {}
+short = {"yesoreyeram-infinity-datasource": "infinity"}
+
+for uid, typ in wanted.items():
+    if uid in have:
+        print(f"Already present: {typ} {uid}")
+        continue
+
+    counts[typ] = counts.get(typ, 0) + 1
+    name = short.get(typ, typ) + ("" if counts[typ] == 1 else f"-{counts[typ]}")
+    spec = {"uid": uid, "type": typ, "name": name, "access": "proxy"}
+
+    if typ == "prometheus":
+        spec["url"] = "http://prometheus:9090"
+    elif typ == "loki":
+        spec["url"] = "http://loki:3100"
+    elif typ == "mysql":
+        spec["url"] = "db:3306"
+        spec["user"] = env["MYSQL_USER"]
+        spec["database"] = env["MYSQL_DATABASE"]
+        spec["jsonData"] = {"database": env["MYSQL_DATABASE"]}
+        spec["secureJsonData"] = {"password": env["MYSQL_PASSWORD"]}
+    elif typ == "yesoreyeram-infinity-datasource":
+        spec["jsonData"] = {
+            "auth_method": "none",
+            "allowedHosts": ["http://processing:12345", "http://anomaly:12345"],
+        }
+    else:
+        print(f"Skipping unknown type {typ} ({uid})")
+        continue
+
+    status, result = call("POST", "/api/datasources", spec)
+    print(f"Created {name} ({typ}): HTTP {status}")
+    if status != 200:
+        print("  ", result)

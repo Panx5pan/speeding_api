@@ -202,7 +202,7 @@ services:
       - KAFKA_TOPIC=events
       - DLQ_TOPIC=anomalies
       - SPEED_ABOVE_MPH=100
-      - VIOLATION_ABOVE_MPH=40
+      - VIOLATION_ABOVE_MPH=100
     depends_on:
       redpanda:
         condition: service_healthy
