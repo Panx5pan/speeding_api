@@ -110,7 +110,7 @@ async def update_stats(client):
     stats["last_updated"] = utc_now_iso()
     await asyncio.to_thread(save_stats, stats)
 
-    logger.debug(f"Updated statistics: {stats}")
+    logger.info(f"Updated statistics: {stats}")
     logger.info(f"Processing round finished in {(time.perf_counter() - start) * 1000:.1f} ms")
 
 
